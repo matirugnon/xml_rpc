@@ -1,42 +1,43 @@
 import socket
-from xmlrpc_redes.protocol import build_request_xml, parse_response_xml
+from .protoloHTTP import build_http_request, read_http_response
+from .xmlrpc_codec import dumps, loads
+from .server import XMLRPCError, FAULT_PARSE_XML, FAULT_OTHER
 
-class RemoteMethod:
-    def __init__(self, sock, method_name):
-        self.sock = sock
-        self.method_name = method_name
+class Client:
 
-    def __call__(self, *args):
-        xml = build_request_xml(self.method_name, args)
-        request = (
-            "POST /RPC2 HTTP/1.1\r\n"
-            f"Host: localhost\r\n"
-            "Content-Type: text/xml\r\n"
-            f"Content-Length: {len(xml)}\r\n"
-            "Connection: close\r\n"
-            "\r\n"
-            f"{xml}"
-        )
-        self.sock.sendall(request.encode())
+    def __init__(self, host: str, port: int, path: str = "/RPC2", timeout: float = 5.0):
+        self.host = host
+        self.port = port
+        self.path = path
+        self.timeout = timeout
 
-        response = b""
-        while True:
-            chunk = self.sock.recv(4096)
-            if not chunk:
-                break
-            response += chunk
+    def __getattr__(self, name: str):
+        """Intercepta llamadas dinámicas como client.metodo(...)"""
+        def call(*args):
+            return self._call(name, args)
+        return call
 
-        return parse_response_xml(response.decode())
+    def _call(self, method: str, params: tuple):
+        # Serializar a XML-RPC
+        try:
+            body = dumps(method, params).encode("utf-8")
+        except Exception as e:
+            raise XMLRPCError(FAULT_PARSE_XML, f"Error serializando XML: {e}")
 
-class Connection:
-    def __init__(self, sock):
-        self.sock = sock
+        # Crear request HTTP
+        request = build_http_request(self.host, self.path, body)
 
-    def __getattr__(self, name):
-        return RemoteMethod(self.sock, name)
+        # Enviar por socket
+        with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
+            sock.sendall(request)
+            status, headers, response_body = read_http_response(sock)
 
-def connect(address, port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.connect((address, int(port)))
-    return Connection(sock)
+        if status != 200:
+            raise XMLRPCError(FAULT_OTHER, f"HTTP status {status}")
+
+        # Parsear respuesta XML-RPC
+        try:
+            return loads(response_body.decode("utf-8"))
+        except Exception as e:
+            raise XMLRPCError(FAULT_PARSE_XML, f"Error parseando XML: {e}")
 
