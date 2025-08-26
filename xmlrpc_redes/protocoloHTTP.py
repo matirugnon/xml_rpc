@@ -22,10 +22,12 @@ def build_http_request(host: str, path: str, body: bytes, content_type: str = "t
 
 def build_http_response(status_code: int, body: bytes, content_type: str = "text/xml") -> bytes:
     reason = {
-        200: "OK",
-        400: "Bad Request",
-        404: "Not Found",
-        500: "Internal Server Error",
+        0: "OK",
+        1: "Error parseo de XML",
+        2: "No existe el metodo invocado",
+        3: "Error en parametros del metodo invocado",
+        4: "Error interno en la ejecucion del metodo",
+        5: "Otros errores",
     }.get(status_code, "OK")
 
     headers = [
