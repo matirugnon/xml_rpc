@@ -1,52 +1,57 @@
+"""
+client.py
+---------
+Cliente de xmlrpc_redes. Exposición de API:
+    conn = connect(address, port)
+    result = conn.metodo(arg1, arg2, ...)
+"""
+from __future__ import annotations
 import socket
-import xml.etree.ElementTree as ET
+from typing import Any, List
+from xmlrpc_redes import build_method_call_xml, parse_method_response_xml, build_http_post, parse_http_response
 
-class Client:
-    def __init__(self, address, port):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((address, port))
+DEFAULT_PATH = "/RPC2"
 
-    def __getattr__(self, method_name):
-        def remote_call(*args):
-            # 1) Construir XML
-            request = self._build_xml_request(method_name, args)
-            # 2) Enviar solicitud HTTP
-            self.sock.sendall(request.encode())
-            # 3) Recibir respuesta
-            response = self._recv_response()
-            # 4) Parsear XML y devolver resultado
-            return self._parse_xml_response(response)
-        return remote_call
+class _Connection:
+    def __init__(self, address: str, port: int, path: str = DEFAULT_PATH, timeout: float = 10.0):
+        self.addr = address
+        self.port = port
+        self.path = path
+        self.timeout = timeout
 
-    def _build_xml_request(self, method_name, args):
-        xml = '<?xml version="1.0"?><methodCall>'
-        xml += f"<methodName>{method_name}</methodName><params>"
-        for a in args:
-            xml += f"<param><value><string>{a}</string></value></param>"
-        xml += "</params></methodCall>"
-        # Encapsular en HTTP POST
-        http = "POST /RPC2 HTTP/1.1\r\n"
-        http += f"Content-Length: {len(xml)}\r\n"
-        http += "Content-Type: text/xml\r\n\r\n"
-        http += xml
-        return http
+    def __getattr__(self, method_name: str):
+        def _remote_call(*args):
+            return self._invoke(method_name, list(args))
+        return _remote_call
 
-    def _recv_response(self):
-        data = b""
-        while True:
-            chunk = self.sock.recv(4096)
-            if not chunk: break
-            data += chunk
-            if b"</methodResponse>" in data or b"</fault>" in data:
-                break
-        return data.decode()
+    def _invoke(self, method: str, params: List[Any]) -> Any:
+        # 1) Construir XML-RPC
+        body = build_method_call_xml(method, params)
+        # 2) Encapsular en HTTP POST
+        http = build_http_post(f"{self.addr}:{self.port}", self.path, body)
+        # 3) Abrir socket y enviar
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(self.timeout)
+            s.connect((self.addr, self.port))
+            s.sendall(http)
+            # 4) Recibir respuesta completa
+            data = b""
+            while True:
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                data += chunk
+        # 5) Parsear HTTP y XML-RPC
+        status_line, headers, body_bytes = parse_http_response(data)
+        # Nota: ignoramos status_code!=200 y dejamos al servidor devolver fault en XML
+        xml_text = body_bytes.decode("utf-8", errors="replace")
+        ok, value = parse_method_response_xml(xml_text)
+        if not ok:
+            code = value.get("faultCode", -1)
+            msg = value.get("faultString", "Error desconocido")
+            raise RuntimeError(f"RPC Fault {code}: {msg}")
+        return value
 
-    def _parse_xml_response(self, response):
-        body = response.split("\r\n\r\n", 1)[1]
-        root = ET.fromstring(body)
-        if root.find("fault") is not None:
-            fault = root.find("fault/value/struct")
-            code = fault.find("member/value/int").text
-            msg = fault.find("member/value/string").text
-            raise Exception(f"RPC Error {code}: {msg}")
-        return root.find(".//param/value/string").text
+def connect(address: str, port: int) -> _Connection:
+    """Punto de entrada público pedido por el enunciado."""
+    return _Connection(address, port)
