@@ -1,43 +1,52 @@
 import socket
-from .protoloHTTP import build_http_request, read_http_response
-from .xmlrpc_codec import dumps, loads
-from .server import XMLRPCError, FAULT_PARSE_XML, FAULT_OTHER
+import xml.etree.ElementTree as ET
 
 class Client:
+    def __init__(self, address, port):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.connect((address, port))
 
-    def __init__(self, host: str, port: int, path: str = "/RPC2", timeout: float = 5.0):
-        self.host = host
-        self.port = port
-        self.path = path
-        self.timeout = timeout
+    def __getattr__(self, method_name):
+        def remote_call(*args):
+            # 1) Construir XML
+            request = self._build_xml_request(method_name, args)
+            # 2) Enviar solicitud HTTP
+            self.sock.sendall(request.encode())
+            # 3) Recibir respuesta
+            response = self._recv_response()
+            # 4) Parsear XML y devolver resultado
+            return self._parse_xml_response(response)
+        return remote_call
 
-    def __getattr__(self, name: str):
-        """Intercepta llamadas dinámicas como client.metodo(...)"""
-        def call(*args):
-            return self._call(name, args)
-        return call
+    def _build_xml_request(self, method_name, args):
+        xml = '<?xml version="1.0"?><methodCall>'
+        xml += f"<methodName>{method_name}</methodName><params>"
+        for a in args:
+            xml += f"<param><value><string>{a}</string></value></param>"
+        xml += "</params></methodCall>"
+        # Encapsular en HTTP POST
+        http = "POST /RPC2 HTTP/1.1\r\n"
+        http += f"Content-Length: {len(xml)}\r\n"
+        http += "Content-Type: text/xml\r\n\r\n"
+        http += xml
+        return http
 
-    def _call(self, method: str, params: tuple):
-        # Serializar a XML-RPC
-        try:
-            body = dumps(method, params).encode("utf-8")
-        except Exception as e:
-            raise XMLRPCError(FAULT_PARSE_XML, f"Error serializando XML: {e}")
+    def _recv_response(self):
+        data = b""
+        while True:
+            chunk = self.sock.recv(4096)
+            if not chunk: break
+            data += chunk
+            if b"</methodResponse>" in data or b"</fault>" in data:
+                break
+        return data.decode()
 
-        # Crear request HTTP
-        request = build_http_request(self.host, self.path, body)
-
-        # Enviar por socket
-        with socket.create_connection((self.host, self.port), timeout=self.timeout) as sock:
-            sock.sendall(request)
-            status, headers, response_body = read_http_response(sock)
-
-        if status != 200:
-            raise XMLRPCError(FAULT_OTHER, f"HTTP status {status}")
-
-        # Parsear respuesta XML-RPC
-        try:
-            return loads(response_body.decode("utf-8"))
-        except Exception as e:
-            raise XMLRPCError(FAULT_PARSE_XML, f"Error parseando XML: {e}")
-
+    def _parse_xml_response(self, response):
+        body = response.split("\r\n\r\n", 1)[1]
+        root = ET.fromstring(body)
+        if root.find("fault") is not None:
+            fault = root.find("fault/value/struct")
+            code = fault.find("member/value/int").text
+            msg = fault.find("member/value/string").text
+            raise Exception(f"RPC Error {code}: {msg}")
+        return root.find(".//param/value/string").text

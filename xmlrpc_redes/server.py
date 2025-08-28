@@ -1,86 +1,66 @@
 import socket
 import threading
-from .http import read_http_request, build_http_response
-from .xmlrpc_codec import dumps_response, dumps_fault, loads_call
-
-class XMLRPCError(Exception):
-    def __init__(self, code, message):
-        super().__init__(f"[{code}] {message}")
-        self.code = code
-        self.message = message
-
-FAULT_PARSE_XML = 1
-FAULT_NO_METHOD = 2
-FAULT_BAD_PARAMS = 3
-FAULT_INTERNAL = 4
-FAULT_OTHER = 5
-
+import xml.etree.ElementTree as ET
 
 class Server:
-
-    def __init__(self, host: str, port: int):
-        self.host = host
-        self.port = port
-        self._methods = {}
+    def __init__(self, addr):
+        self.addr = addr
+        self.methods = {}
 
     def add_method(self, func):
-        """Registra un procedimiento remoto."""
-        self._methods[func.__name__] = func
+        self.methods[func.__name__] = func
 
     def serve(self):
-        """Bucle principal del servidor (bloqueante)."""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind((self.host, self.port))
-            s.listen(5)
-            print(f"Servidor XML-RPC escuchando en {self.host}:{self.port} ...")
-
+            s.bind(self.addr)
+            s.listen()
+            print(f"Servidor escuchando en {self.addr}...")
             while True:
-                conn, addr = s.accept()
-                threading.Thread(target=self._handle_client, args=(conn, addr), daemon=True).start()
+                conn, _ = s.accept()
+                threading.Thread(target=self.handle_client, args=(conn,)).start()
 
-    def _handle_client(self, conn: socket.socket, addr):
-        with conn:
-            try:
-                method, path, headers, body = read_http_request(conn)
-
-                if method != "POST" or path != "/RPC2":
-                    resp = build_http_response(404, b"")
-                    conn.sendall(resp)
-                    return
-
-                # Parsear XML-RPC request
+    def handle_client(self, conn):
+        data = conn.recv(4096).decode()
+        body = data.split("\r\n\r\n", 1)[1]
+        try:
+            root = ET.fromstring(body)
+            method = root.find("methodName").text
+            params = [p.find("value/string").text for p in root.findall(".//param")]
+            if method not in self.methods:
+                response = self._build_fault(2, "No existe el método invocado")
+            else:
                 try:
-                    proc_name, params = loads_call(body.decode("utf-8"))
+                    result = self.methods[method](*params)
+                    response = self._build_response(result)
                 except Exception as e:
-                    fault = dumps_fault(FAULT_PARSE_XML, f"Error parseando XML: {e}").encode("utf-8")
-                    conn.sendall(build_http_response(200, fault))
-                    return
+                    response = self._build_fault(4, f"Error interno: {e}")
+        except ET.ParseError:
+            response = self._build_fault(1, "Error parseo de XML")
 
-                # Buscar procedimiento
-                func = self._methods.get(proc_name)
-                if not func:
-                    fault = dumps_fault(FAULT_NO_METHOD, "Método no existe").encode("utf-8")
-                    conn.sendall(build_http_response(200, fault))
-                    return
+        http = "HTTP/1.1 200 OK\r\n"
+        http += f"Content-Length: {len(response)}\r\n"
+        http += "Content-Type: text/xml\r\n\r\n"
+        http += response
+        conn.sendall(http.encode())
+        conn.close()
 
-                # Ejecutar procedimiento
-                try:
-                    result = func(*params)
-                except TypeError as e:
-                    fault = dumps_fault(FAULT_BAD_PARAMS, f"Parámetros inválidos: {e}").encode("utf-8")
-                    conn.sendall(build_http_response(200, fault))
-                    return
-                except Exception as e:
-                    fault = dumps_fault(FAULT_INTERNAL, f"Error interno: {e}").encode("utf-8")
-                    conn.sendall(build_http_response(200, fault))
-                    return
+    def _build_response(self, result):
+        return f"""<?xml version="1.0"?>
+                    <methodResponse>
+                    <params>
+                        <param><value><string>{result}</string></value></param>
+                    </params>
+                    </methodResponse>"""
 
-                # OK → devolver resultado
-                response = dumps_response(result).encode("utf-8")
-                conn.sendall(build_http_response(200, response))
-
-            except Exception as e:
-                fault = dumps_fault(FAULT_INTERNAL, f"Fallo general: {e}").encode("utf-8")
-                conn.sendall(build_http_response(500, fault))
-
+    def _build_fault(self, code, msg):
+        return f"""<?xml version="1.0"?>
+                    <methodResponse>
+                    <fault>
+                        <value>
+                        <struct>
+                            <member><name>faultCode</name><value><int>{code}</int></value></member>
+                            <member><name>faultString</name><value><string>{msg}</string></value></member>
+                        </struct>
+                        </value>
+                    </fault>
+                    </methodResponse>"""
