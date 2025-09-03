@@ -117,21 +117,21 @@ def construir_respuesta_xml(res: Any) -> str:
     param.append(serializacion(res))
     return '<?xml version="1.0"?>' + ET.tostring(elem, encoding="unicode")
 
-def construir_error_xml(code: int, message: str) -> str:
-    root = ET.Element("methodResponse")
-    fault = ET.SubElement(root, "fault")
+def construir_error_xml(num_err: int, mensaje_err: str) -> str:
+    elem = ET.Element("methodResponse")
+    fault = ET.SubElement(elem, "fault")
     value = ET.SubElement(fault, "value")
     struct = ET.SubElement(value, "struct")
 
     m1 = ET.SubElement(struct, "member")
     n1 = ET.SubElement(m1, "name"); n1.text = "faultCode"
-    m1.append(serializacion(int(code)))
+    m1.append(serializacion(int(num_err)))
 
     m2 = ET.SubElement(struct, "member")
     n2 = ET.SubElement(m2, "name"); n2.text = "faultString"
-    m2.append(serializacion(str(message)))
+    m2.append(serializacion(str(mensaje_err)))
 
-    return '<?xml version="1.0"?>' + ET.tostring(root, encoding="unicode")
+    return '<?xml version="1.0"?>' + ET.tostring(elem, encoding="unicode")
 
 def leer_respuesta_xml(xml_text: str) -> Tuple[bool, Any]:
     root = ET.fromstring(xml_text)
@@ -171,15 +171,10 @@ def construir_llamado_http(host: str, data: str) -> bytes:
     return encabezado + data_bytes
 
 def leer_llamado_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]:
-    """
-    Parsea una solicitud HTTP cruda y devuelve (request_line, headers_dict, body).
-    Si el cuerpo no está completamente recibido (según Content-Length), lo esperado
-    es que la capa superior continúe leyendo desde el socket.
-    """
     sep = b"\r\n\r\n"
     if sep not in resp:
         return "", {}, b""
-    encabezado, body = resp.split(sep, 1)
+    encabezado, cuerpo = resp.split(sep, 1)
     lineas = encabezado.decode().split("\r\n")
     llamado = lineas[0]
     encabezados = {}
@@ -189,7 +184,7 @@ def leer_llamado_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]:
         if ":" in ln:
             k, v = ln.split(":", 1)
             encabezados[k.strip().lower()] = v.strip()
-    return llamado, encabezados, body
+    return llamado, encabezados, cuerpo
 
 def construir_respuesta_http(data: str) -> bytes:
     data_bytes = data.encode()

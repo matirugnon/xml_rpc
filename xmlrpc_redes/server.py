@@ -1,12 +1,3 @@
-"""
-server.py
----------
-Servidor XML-RPC minimalista sobre sockets.
-API:
-    server = Server(('0.0.0.0', 8080))
-    server.add_method(func)  # func.__name__ será el nombre remoto
-    server.serve()  # bloqueante
-"""
 from __future__ import annotations
 import socket
 import threading
@@ -43,24 +34,22 @@ class Server:
             print(f"[xmlrpc_redes] Server escuchando en {self.address[0]}:{self.address[1]}")
             while True:
                 conn, peer = s.accept()
-                th = threading.Thread(target=self._handle_client, args=(conn, peer), daemon=True)
+                th = threading.Thread(target=self.atender_cliente, args=(conn, peer), daemon=True)
                 th.start()
 
-    # --------------------- Internals ---------------------
-
-    def _handle_client(self, conn: socket.socket, peer):
+    def atender_cliente(self, conn: socket.socket, peer):
         try:
             data = b""
             while b"\r\n\r\n" not in data:
-                chunk = conn.recv(4096)
-                if not chunk:
+                bytes_recv = conn.recv(4096)
+                if not bytes_recv:
                     break
-                data += chunk
+                data += bytes_recv
             if not data:
                 conn.close()
                 return
 
-            llamado, encabezados, body = leer_llamado_http(data)
+            llamado, encabezados, cuerpo = leer_llamado_http(data)
             if not llamado:
                 self.error(conn, OTRO_ERROR, "Solicitud HTTP inválida")
                 return
@@ -70,22 +59,29 @@ class Server:
                 self.error(conn, OTRO_ERROR, "Solo se acepta HTTP POST")
                 return
 
-            # Completar cuerpo según Content-Length si falta
+            user_agent = encabezados.get("user-agent")
+            host = encabezados.get("host")
+            content_type = encabezados.get("content-type")
             content_length = int(encabezados.get("content-length"))
-            if content_length is None:
+
+            # Cheque que existan los encabezados necesarios
+            if (user_agent is None) or (host is None) or (content_type is None) or (content_length is None):
+                self.error(conn, OTRO_ERROR, "Error en los encabezados HTTP")
+            if content_type != "text/xml":
                 self.error(conn, OTRO_ERROR, "Error en los encabezados HTTP")
 
-            while len(body) < content_length:
-                chunk = conn.recv(4096)
-                if not chunk:
+            # Completar cuerpo según Content-Length si falta
+            while len(cuerpo) < content_length:
+                bytes_recv = conn.recv(4096)
+                if not bytes_recv:
                     break
-                body += chunk
+                cuerpo += bytes_recv
 
-            xml_text = body.decode()
+            cuerpo_xml = cuerpo.decode()
 
             # Parsear XML-RPC
             try:
-                method, params = leer_llamado_xml(xml_text)
+                method, params = leer_llamado_xml(cuerpo_xml)
             except ET.ParseError:
                 self.error(conn, ERROR_PARSEO_XML, "Error parseo de XML")
                 return
@@ -100,23 +96,20 @@ class Server:
                 return
 
             try:
-                result = func(*params)
+                res = func(*params)
             except TypeError as e:
-                self.error(conn, ERROR_EN_PARAMS, f"Parámetros inválidos: {e}")
+                self.error(conn, ERROR_EN_PARAMS, f"Error en parámetros del método invocado: {e}")
                 return
             except Exception as e:
-                self.error(conn, ERROR_INTERNO, f"Error interno en la ejecución: {e}")
+                self.error(conn, ERROR_INTERNO, f"Error interno en la ejecución del método: {e}")
                 return
 
-            # Construir respuesta OK
-            resp_xml = construir_respuesta_xml(result)
+            # Construir respuesta
+            resp_xml = construir_respuesta_xml(res)
             conn.sendall(construir_respuesta_http(resp_xml))
         finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            conn.close()
 
-    def error(self, conn: socket.socket, code: int, msg: str):
-        resp_xml = construir_error_xml(code, msg)
+    def error(self, conn: socket.socket, num_err: int, mensaje_err: str):
+        resp_xml = construir_error_xml(num_err, mensaje_err)
         conn.sendall(construir_respuesta_http(resp_xml))
