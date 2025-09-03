@@ -14,24 +14,21 @@ from typing import Callable, Dict, Tuple, Any
 import xml.etree.ElementTree as ET
 
 from xmlrpc_redes import (
-    parse_http_request, http_ok_response,
-    parse_method_call_xml, build_method_response_xml, build_fault_xml
+    leer_llamado_http, construir_respuesta_http,
+    leer_llamado_xml, construir_respuesta_xml, construir_error_xml
 )
 
-FAULT_PARSE_XML = 1
-FAULT_NO_METHOD = 2
-FAULT_BAD_PARAMS = 3
-FAULT_INTERNAL = 4
-FAULT_OTHER = 5
+ERROR_PARSEO_XML = 1
+ERROR_NO_EXISTE_METODO = 2
+ERROR_EN_PARAMS = 3
+ERROR_INTERNO = 4
+OTRO_ERROR = 5
 
 class Server:
-    def __init__(self, addr: Tuple[str, int], path: str = "/RPC2", backlog: int = 20, timeout: float = 30.0):
-        self.addr = addr
-        self.path = path
-        self.backlog = backlog
-        self.timeout = timeout
+    def __init__(self, address: Tuple[str, int]):
+        self.address = address
         self.methods: Dict[str, Callable[..., Any]] = {}
-        self._sock = None
+        self.sock = None
 
     def add_method(self, func: Callable[..., Any]) -> None:
         """Registra un procedimiento remoto. El nombre es func.__name__"""
@@ -40,13 +37,12 @@ class Server:
     def serve(self) -> None:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(self.addr)
-            s.listen(self.backlog)
-            self._sock = s
-            print(f"[xmlrpc_redes] Server escuchando en {self.addr[0]}:{self.addr[1]} (path={self.path})")
+            s.bind(self.address)
+            s.listen()
+            self.sock = s
+            print(f"[xmlrpc_redes] Server escuchando en {self.address[0]}:{self.address[1]}")
             while True:
                 conn, peer = s.accept()
-                conn.settimeout(self.timeout)
                 th = threading.Thread(target=self._handle_client, args=(conn, peer), daemon=True)
                 th.start()
 
@@ -55,7 +51,6 @@ class Server:
     def _handle_client(self, conn: socket.socket, peer):
         try:
             data = b""
-            # leer encabezados
             while b"\r\n\r\n" not in data:
                 chunk = conn.recv(4096)
                 if not chunk:
@@ -65,69 +60,63 @@ class Server:
                 conn.close()
                 return
 
-            request_line, headers, body = parse_http_request(data)
-            if not request_line:
-                self._send_fault(conn, FAULT_OTHER, "Solicitud HTTP inválida")
+            llamado, encabezados, body = leer_llamado_http(data)
+            if not llamado:
+                self.error(conn, OTRO_ERROR, "Solicitud HTTP inválida")
                 return
 
-            # Validar método y path
-            if not request_line.startswith("POST "):
-                self._send_fault(conn, FAULT_OTHER, "Solo se acepta HTTP POST")
-                return
-            # path
-            try:
-                path = request_line.split(" ")[1]
-            except Exception:
-                self._send_fault(conn, FAULT_OTHER, "Request-Line inválida")
-                return
-            if path != self.path:
-                self._send_fault(conn, FAULT_OTHER, f"Path inválido (esperado {self.path})")
+            # Validar método
+            if not llamado.startswith("POST "):
+                self.error(conn, OTRO_ERROR, "Solo se acepta HTTP POST")
                 return
 
             # Completar cuerpo según Content-Length si falta
-            content_length = int(headers.get("content-length", "0"))
+            content_length = int(encabezados.get("content-length"))
+            if content_length is None:
+                self.error(conn, OTRO_ERROR, "Error en los encabezados HTTP")
+
             while len(body) < content_length:
                 chunk = conn.recv(4096)
                 if not chunk:
                     break
                 body += chunk
 
-            xml_text = body.decode("utf-8", errors="replace")
+            xml_text = body.decode()
 
             # Parsear XML-RPC
             try:
-                method, params = parse_method_call_xml(xml_text)
+                method, params = leer_llamado_xml(xml_text)
             except ET.ParseError:
-                self._send_fault(conn, FAULT_PARSE_XML, "Error parseo de XML")
+                self.error(conn, ERROR_PARSEO_XML, "Error parseo de XML")
                 return
             except Exception as e:
-                self._send_fault(conn, FAULT_OTHER, f"Solicitud XML-RPC inválida: {e}")
+                self.error(conn, OTRO_ERROR, f"Solicitud XML-RPC inválida: {e}")
                 return
 
             # Buscar método y ejecutar
             func = self.methods.get(method)
             if func is None:
-                self._send_fault(conn, FAULT_NO_METHOD, "No existe el método invocado")
+                self.error(conn, ERROR_NO_EXISTE_METODO, "No existe el método invocado")
                 return
 
             try:
                 result = func(*params)
             except TypeError as e:
-                self._send_fault(conn, FAULT_BAD_PARAMS, f"Parámetros inválidos: {e}")
+                self.error(conn, ERROR_EN_PARAMS, f"Parámetros inválidos: {e}")
                 return
             except Exception as e:
-                self._send_fault(conn, FAULT_INTERNAL, f"Error interno en la ejecución: {e}")
+                self.error(conn, ERROR_INTERNO, f"Error interno en la ejecución: {e}")
                 return
 
             # Construir respuesta OK
-            resp_xml = build_method_response_xml(result)
-            conn.sendall(http_ok_response(resp_xml))
+            resp_xml = construir_respuesta_xml(result)
+            conn.sendall(construir_respuesta_http(resp_xml))
         finally:
             try:
                 conn.close()
             except Exception:
                 pass
 
-    def _send_fault(self, conn: socket.socket, code: int, msg: str):
-        resp_xml = build_fault_xml(code, msg)
-        conn.sendall(http_ok_response(resp_xml))
+    def error(self, conn: socket.socket, code: int, msg: str):
+        resp_xml = construir_error_xml(code, msg)
+        conn.sendall(construir_respuesta_http(resp_xml))
