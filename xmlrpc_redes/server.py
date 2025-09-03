@@ -5,8 +5,8 @@ from typing import Callable, Dict, Tuple, Any
 import xml.etree.ElementTree as ET
 
 from xmlrpc_redes import (
-    leer_llamado_http, construir_respuesta_http,
-    leer_llamado_xml, construir_respuesta_xml, construir_error_xml
+    parsear_llamado_http, construir_respuesta_http,
+    parsear_llamado_xml, construir_respuesta_xml, construir_error_xml
 )
 
 ERROR_PARSEO_XML = 1
@@ -49,7 +49,7 @@ class Server:
                 conn.close()
                 return
 
-            llamado, encabezados, cuerpo = leer_llamado_http(data)
+            llamado, encabezados, cuerpo = parsear_llamado_http(data)
             if not llamado:
                 self.error(conn, OTRO_ERROR, "Solicitud HTTP inválida")
                 return
@@ -81,7 +81,7 @@ class Server:
 
             # Parsear XML-RPC
             try:
-                method, params = leer_llamado_xml(cuerpo_xml)
+                method, params = parsear_llamado_xml(cuerpo_xml)
             except ET.ParseError:
                 self.error(conn, ERROR_PARSEO_XML, "Error parseo de XML")
                 return

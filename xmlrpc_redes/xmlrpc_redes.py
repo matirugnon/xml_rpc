@@ -96,7 +96,7 @@ def construir_llamado_xml(method: str, params: List[Any]) -> str:
         param.append(serializacion(p))
     return '<?xml version="1.0"?>' + ET.tostring(elem, encoding="unicode")
 
-def leer_llamado_xml(xml: str) -> Tuple[str, List[Any]]:
+def parsear_llamado_xml(xml: str) -> Tuple[str, List[Any]]:
     elem = ET.fromstring(xml)
     if elem.tag != "methodCall":
         raise ValueError("XML-RPC: método inválido")
@@ -133,7 +133,7 @@ def construir_error_xml(num_err: int, mensaje_err: str) -> str:
 
     return '<?xml version="1.0"?>' + ET.tostring(elem, encoding="unicode")
 
-def leer_respuesta_xml(xml_text: str) -> Tuple[bool, Any]:
+def parsear_respuesta_xml(xml_text: str) -> Tuple[bool, Any]:
     root = ET.fromstring(xml_text)
     if root.tag != "methodResponse":
         raise ValueError("XML-RPC: respuesta inválida")
@@ -170,7 +170,7 @@ def construir_llamado_http(host: str, data: str) -> bytes:
     encabezado = "\r\n".join(encabezados).encode()
     return encabezado + data_bytes
 
-def leer_llamado_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]:
+def parsear_llamado_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]:
     sep = b"\r\n\r\n"
     if sep not in resp:
         return "", {}, b""
@@ -198,6 +198,6 @@ def construir_respuesta_http(data: str) -> bytes:
     encabezado = "\r\n".join(encabezados).encode()
     return encabezado + data_bytes
 
-def leer_respuesta_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]:
-    """Igual que leer_llamado_http pero para respuestas HTTP."""
-    return leer_llamado_http(resp)
+def parsear_respuesta_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]:
+    """Igual que parsear_llamado_http pero para respuestas HTTP."""
+    return parsear_llamado_http(resp)

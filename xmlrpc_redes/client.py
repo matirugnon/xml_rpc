@@ -1,7 +1,7 @@
 from __future__ import annotations
 import socket
 from typing import Any, List
-from xmlrpc_redes import construir_llamado_xml, leer_respuesta_xml, construir_llamado_http, leer_respuesta_http
+from xmlrpc_redes import construir_llamado_xml, parsear_respuesta_xml, construir_llamado_http, parsear_respuesta_http
 
 class Client:
     def __init__(self, address: str, port: int, timeout: float = 10.0):
@@ -15,31 +15,30 @@ class Client:
         return _remote_call
 
     def _invoke(self, method: str, params: List[Any]) -> Any:
-        # 1) Construir XML-RPC
+        # Construir XML-RPC
         body = construir_llamado_xml(method, params)
-        # 2) Encapsular en HTTP POST
+        # Encapsular en HTTP POST
         http = construir_llamado_http(f"{self.addr}:{self.port}", body)
-        # 3) Abrir socket y enviar
+        # Abrir socket y enviar
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(self.timeout)
             s.connect((self.addr, self.port))
             s.sendall(http)
-            # 4) Recibir respuesta completa
+            # Recibir respuesta completa
             data = b""
             while True:
                 chunk = s.recv(4096)
                 if not chunk:
                     break
                 data += chunk
-        # 5) Parsear HTTP y XML-RPC
-        status_line, headers, body_bytes = leer_respuesta_http(data)
-        # Nota: ignoramos status_code!=200 y dejamos al servidor devolver fault en XML
-        xml_text = body_bytes.decode("utf-8", errors="replace")
-        ok, res = leer_respuesta_xml(xml_text)
+        # Parsear HTTP y XML-RPC
+        _, encabezados, cuerpo = parsear_respuesta_http(data)
+        cuerpo_xml = cuerpo.decode()
+        ok, res = parsear_respuesta_xml(cuerpo_xml)
         if not ok:
-            code = res.get("faultCode", -1)
-            msg = res.get("faultString", "Error desconocido")
-            raise RuntimeError(f"RPC Fault {code}: {msg}")
+            num_err = res.get("faultCode", 5)
+            mensaje_err = res.get("faultString", "Error desconocido")
+            raise RuntimeError(f"Error RPC {num_err}: {mensaje_err}")
         return res
 
 def connect(address: str, port: int) -> Client:
