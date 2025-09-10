@@ -4,7 +4,7 @@ from typing import Any, List
 from xmlrpc_redes import construir_llamado_xml, parsear_respuesta_xml, construir_llamado_http, parsear_respuesta_http
 
 class Client:
-    def __init__(self, address: str, port: int, timeout: float = 10.0):
+    def __init__(self, address: str, port: int, timeout: float = 20.0): #cambio timeout a 20 segundos para pruebas
         self.addr = address
         self.port = port
         self.timeout = timeout
