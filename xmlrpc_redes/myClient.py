@@ -126,6 +126,34 @@ def test_concurrency_mixed_operations():
     print("\n✅ PRUEBA DE CONCURRENCIA MEJORADA: Todos los clientes han terminado.")
 
 
+#pruebas en el server  2
+
+def test_server2_methods(conn_b):
+    """Pruebas específicas para server2 (100.100.0.2) - Simple y efectiva."""
+    print("\n--- PRUEBAS PARA SERVIDOR B (100.100.0.2) ---")
+
+    # 1. Llamadas Válidas
+    print("\n1. Llamadas Válidas:")
+    print("  B.power(2, 8)       =>", conn_b.power(2, 8))          # → 256.0
+    print("  B.join_with('-', [1,2,3]) =>", conn_b.join_with("-", [1,2,3]))  # → "1-2-3"
+    print("  B.to_upper('rpc', 3)  =>", conn_b.to_upper("rpc", 3))   # → "RPCRPCRPC"
+
+    # 2. Casos de Error (Parámetros Incorrectos)
+    print("\n2. Casos de Error (Parámetros Incorrectos):")
+    try:
+        print("  B.join_with('-', 'NO_es_lista') =>", conn_b.join_with("-", "NO_es_lista"))
+    except Exception as e:
+        print("  ✅ Error esperado (join_with):", e)
+
+    try:
+        print("  B.to_upper('hola', 'NO_es_int') =>", conn_b.to_upper("hola", "NO_es_int"))
+    except Exception as e:
+        print("  ✅ Error esperado (to_upper):", e)
+
+    try:
+        print("  B.power('a', 'b') =>", conn_b.power('a', 'b'))
+    except Exception as e:
+        print("  ✅ Error esperado (power):", e)
 
 
 
@@ -133,20 +161,24 @@ def test_concurrency_mixed_operations():
 
 def main():
     conn_a = connect("150.150.0.2", 8000)
+    conn_b = connect("100.100.0.2", 8000)  
     
     # Pruebas básicas
     test_basic_calls(conn_a)
     
     # Nuevos métodos para defensa
     test_new_methods(conn_a)
-    
+
     # Casos de error
     test_error_cases(conn_a)
-    
-    # Prueba de concurrencia
+
+    #test server 2
+    test_server2_methods(conn_b)
+
+    # Prueba de concurrencia, se hacen en el server 1
     test_concurrency()
 
-    # prueba de concurrencia con operaciones mixtas y errores
+    # prueba de concurrencia con operaciones mixtas y errores, se hacen en el server 1
     test_concurrency_mixed_operations()
     
     print("\n✅ ¡Todas las pruebas completadas exitosamente!")
