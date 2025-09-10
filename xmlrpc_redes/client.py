@@ -40,5 +40,5 @@ class Client:
             raise RuntimeError(f"Error RPC {num_err}: {mensaje_err}")
         return res
 
-def connect(address: str, port: int, timeout: float = 10.0) -> Client:
+def connect(address: str, port: int, timeout: float = 20.0) -> Client:
     return Client(address, port, timeout)

@@ -2,6 +2,168 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, List, Tuple
 
+# IMPORTANTE Documentar todas las funciones en el archivo de documentacion
+# explicar que hace cada funcion y dar ejemplos de uso
+
+#explicar tambien las decisiones que se tomaron en el diseño de las funciones 
+# explicar que se uso ElementTree para manejar XML y explicar su funcionamiento basico
+# explicar que se uso sockets para manejar la comunicacion en red
+# explicar que se uso typing para manejar tipos de datos y mejorar la legibilidad del codigo
+
+#explicar que se siguio el estandar XML-RPC y HTTP/1.1 para la comunicacion
+#explicar porque se uso POST en lugar de GET
+#explicar que se manejo errores comunes y se definieron codigos de error
+#explicar que se uso excepciones para manejar errores en el cliente y servidor
+#explicar que se uso threading para manejar multiples conexiones en el servidor
+
+#explicar que decisiones se tomaron para serializar y deserializar tipos de datos
+#explicar que decisiones se tomaron para construir y parsear llamadas y respuestas XML-RPC
+#explicar que decisiones se tomaron para construir y parsear llamadas y respuestas HTTP
+#explicar que decisiones se tomaron para manejar el socket y la comunicacion en red
+#explicar que decisiones se tomaron para manejar el timeout y errores de red
+#explicar que decisiones se tomaron para manejar la concurrencia en el servidor (HILOS)
+#explicar como se diseño la validacion y la integridad de los datos, como se impide funciones invalidas o parametros incorrectos
+#explicar que decisiones se tomaron a nivel de protocolo XML-RPC y HTTP
+#explicar que decisiones se tomaron a nivel de arquitectura del cliente y servidor
+
+
+
+
+"""Funciones para serializar y deserializar tipos de datos
+aca van todas las funciones que sirven para manejar XML y HTTP
+
+funciones:
+
+XML
+
+-----------------------------------------------------------------------
+
+1. serializacion(valor: Any) -> ET.Element
+2. deserializacion(elem: ET.Element) -> Any
+
+sirven para convertir entre tipos de Python y XML-RPC, por ejemplo: 
+
+para serializar un int, se crea un elemento <value><int>...</int></value>
+para deserializar, se recibe un elemento <value> y se devuelve el int
+
+---------------------------------------------------------------------
+
+3. construir_llamado_xml(method: str, params: List[Any]) -> str
+
+
+sirve para construir y parsear llamadas XML-RPC completas, por ejemplo:
+construir_llamado_xml("suma", [5,7]) devuelve el string XML:
+
+<?xml version="1.0"?>
+<methodCall>
+  <methodName>suma</methodName>
+    <params>
+        <param><value><int>5</int></value></param>
+        <param><value><int>7</int></value></param>
+    </params>
+</methodCall>
+
+esta funcion es usada por el cliente para enviar llamadas al servidor,
+
+4. parsear_llamado_xml(xml: str) -> Tuple[str, List[Any]]
+
+esta es usada por el servidor para recibir llamadas del cliente,
+devuelve el nombre del método y la lista de parámetros
+por ejemplo, parsear_llamado_xml(...) del XML anterior devuelve ("suma", [5, 7])
+
+---------------------------------------------------------------
+
+5. construir_respuesta_xml(res: Any) -> str
+
+esta sirve para construir respuestas XML-RPC exitosas, por ejemplo:
+construir_respuesta_xml(12) devuelve el string XML:
+<?xml version="1.0"?>
+<methodResponse>
+    <params>
+        <param><value><int>12</int></value></param>
+    </params>
+</methodResponse>
+esta es usada por el servidor para responder al cliente
+
+
+6. construir_error_xml(num_err: int, mensaje_err: str) -> str
+
+esta se usa por el servidor para responder errores al cliente
+por ejemplo, construir_error_xml(4, "No existe el método invocado") devuelve:   
+<?xml version="1.0"?>
+<methodResponse>
+    <fault>
+        <value>
+            <struct>
+                <member>   
+                    <name>faultCode</name>
+                    <value><int>4</int></value>
+                </member>
+                <member>
+                    <name>faultString</name>
+                    <value><string>No existe el método invocado</string></value>
+                </member>
+            </struct>
+        </value>
+    </fault>
+</methodResponse>
+
+
+7. parsear_respuesta_xml(xml_text: str) -> Tuple[bool, Any]
+
+esta es usada por el cliente para recibir respuestas del servidor
+devuelve una tupla (ok, res) donde ok es True si la respuesta es exitosa
+y res es el valor devuelto o el diccionario de error
+se recibe el string pasado por el servidor y se parsea a XML
+y se devuelve el resultado deserializado como tupla (ok, res)
+por ejemplo, parsear_respuesta_xml(...) del XML anterior devuelve (False, {"faultCode": 4, "faultString": "No existe el método invocado"})
+
+Http
+
+son usadas tanto por el cliente como por el servidor para manejar la capa HTTP
+estas funciones construyen y parsean llamadas y respuestas HTTP/1.1
+
+1. construir_llamado_http(host: str, data: str) -> bytes
+
+esta se usa tanto por el cliente como por el servidor para construir llamadas y respuestas HTTP
+por ejemplo, construir_llamado_http("localhost:8000", "<xml>...</xml>") devuelve:
+
+
+b"POST / HTTP/1.1\r\nHost: localhost:8000\r\n
+User-Agent: xmlrpc_redes/1.0\r\nContent-Type: text/xml\r\n
+Content-Length: 15\r\n
+Connection: close\r\n\r\n<xml>...</xml>"
+
+
+2. parsear_llamado_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]
+
+esta se usa tanto por el cliente como por el servidor para parsear llamadas y respuestas HTTP
+devuelve una tupla (llamado, encabezados, cuerpo) 
+
+esta funcion separa las 3 partes que nos interesan de una llamada o respuesta HTTP:
+- la primera linea (llamado)
+- los encabezados (encabezados)
+- el cuerpo (cuerpo)
+
+
+3. construir_respuesta_http(data: str) -> bytes
+
+tambien se usa tanto por el cliente como por el servidor para construir respuestas HTTP
+por ejemplo, construir_respuesta_http("<xml>...</xml>") devuelve:
+b"HTTP/1.1 200 OK\r\nContent-Type: text/xml\r\n
+Content-Length: 15\r\n
+Connection: close\r\n\r\n
+<xml>...</xml>"
+
+
+4. parsear_respuesta_http(resp: bytes) -> Tuple[str, Dict[str, str], bytes]
+
+mas de lo mismo, esta se usa tanto por el cliente como por el servidor para parsear respuestas HTTP
+devuelve una tupla (llamado, encabezados, cuerpo) igual que parsear_llamado_http
+
+
+
+"""
 
 # -----------------------------
 # XML
