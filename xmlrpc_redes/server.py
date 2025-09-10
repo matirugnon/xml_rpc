@@ -1,4 +1,3 @@
-from __future__ import annotations
 import socket
 import threading
 from typing import Callable, Dict, Tuple, Any

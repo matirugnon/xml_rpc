@@ -1,10 +1,9 @@
-from __future__ import annotations
 import socket
 from typing import Any, List
 from xmlrpc_redes import construir_llamado_xml, parsear_respuesta_xml, construir_llamado_http, parsear_respuesta_http
 
 class Client:
-    def __init__(self, address: str, port: int, timeout: float = 10.0):
+    def __init__(self, address: str, port: int, timeout: float):
         self.addr = address
         self.port = port
         self.timeout = timeout
@@ -17,7 +16,7 @@ class Client:
     def _invoke(self, method: str, params: List[Any]) -> Any:
         # Construir XML-RPC
         body = construir_llamado_xml(method, params)
-        # Encapsular en HTTP POST
+        # Construir llamado HTTP
         http = construir_llamado_http(f"{self.addr}:{self.port}", body)
         # Abrir socket y enviar
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -41,5 +40,5 @@ class Client:
             raise RuntimeError(f"Error RPC {num_err}: {mensaje_err}")
         return res
 
-def connect(address: str, port: int) -> Client:
-    return Client(address, port)
+def connect(address: str, port: int, timeout: float = 10.0) -> Client:
+    return Client(address, port, timeout)

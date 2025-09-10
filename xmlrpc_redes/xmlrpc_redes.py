@@ -1,4 +1,3 @@
-from __future__ import annotations
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from typing import Any, Dict, List, Tuple

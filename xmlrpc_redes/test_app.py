@@ -1,13 +1,3 @@
-"""
-test_app.py
------------
-Arranca dos servidores con 3 métodos cada uno, y corre un cliente que
-prueba casos OK y de error.
-
-Uso:
-    python test_app.py
-"""
-from __future__ import annotations
 import threading
 import time
 
