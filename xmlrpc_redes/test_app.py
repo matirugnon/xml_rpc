@@ -4,6 +4,8 @@ import time
 from server import Server
 from client import connect
 
+#Tests creados al momendo de realizar la parte 2, deprecados para la parte 3
+
 # ----------------------- Servidor A -----------------------
 def suma(a, b):
     return int(a) + int(b)
