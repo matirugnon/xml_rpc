@@ -61,14 +61,17 @@ class Server:
             user_agent = encabezados.get("user-agent")
             host = encabezados.get("host")
             content_type = encabezados.get("content-type")
-            content_length = int(encabezados.get("content-length"))
+            content_length = encabezados.get("content-length")
 
             # Cheque que existan los encabezados necesarios
             if (user_agent is None) or (host is None) or (content_type is None) or (content_length is None):
                 self.error(conn, OTRO_ERROR, "Error en los encabezados HTTP")
+                return
             if content_type != "text/xml":
                 self.error(conn, OTRO_ERROR, "Error en los encabezados HTTP")
+                return
 
+            content_length = int(content_length)
             # Completar cuerpo según Content-Length si falta
             while len(cuerpo) < content_length:
                 bytes_recv = conn.recv(4096)

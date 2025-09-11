@@ -4,6 +4,8 @@ import threading
 import time
 from client import connect
 from lorem_text import lorem  
+import socket
+
 
 def test_basic_calls(conn):
     print("\n--- Llamadas Válidas Básicas ---")
@@ -12,7 +14,7 @@ def test_basic_calls(conn):
     print("A.concat('hi','!') =>", conn.concat("hi", "!"))
 
 def test_new_methods(conn):
-    print("\n--- Nuevos Métodos para Defensa ---")
+    print("\n--- Nuevos Métodos ---")
     print("A.get_current_year() =>", conn.get_current_year())
     print("A.repeat_string(3, 'OK') =>", conn.repeat_string(3, "OK"))
     
@@ -102,11 +104,11 @@ def test_concurrency_mixed_operations():
 
     # Definimos las operaciones para cada cliente
     test_cases = [
-        (1, "suma", (10, 20)),               # Cliente 1: suma -> éxito
-        (2, "divide", (100, 0)),             # Cliente 2: división por cero -> ERROR
-        (3, "repeat_string", (3, "Jorge!")),   # Cliente 3: repeat_string -> éxito
-        (4, "suma", ("a", "b")),             # Cliente 4: suma con strings -> ERROR (parámetros inválidos)
-        (5, "concat", ("Tiago", " Ger"))    # Cliente 5: concat -> éxito
+        (1, "suma", (10, 20)),               # Cliente 1 éxito
+        (2, "divide", (100, 0)),             # Cliente 2 ERROR
+        (3, "repeat_string", (3, "Jorge!")),   # Cliente 3 éxito
+        (4, "suma", ("a", "b")),             # Cliente 4 ERROR (parámetros inválidos)
+        (5, "concat", ("Tiago", " Ger"))    # Cliente 5 éxito
     ]
 
     threads = []
@@ -159,10 +161,123 @@ def test_server2_methods(conn_b):
 
 
 
+
+def test_invalid_xml():
+    print("\n--- Prueba de XML Inválido ---")
+
+    # XML intencionalmente mal formado 
+    invalid_xml = """<?xml version="1.0"?>
+    <MatiasRugnon>
+    <methodName>suma</methodName>
+    <params>
+        <param><value><int>5</int></value></param>
+        <param><value><int>7</int></value></param> 
+    </params>
+    </methodCall>
+    """
+
+    # Armamos el request HTTP a mano
+    host = "150.150.0.2:8000"
+    data_bytes = invalid_xml.encode()
+    request = (
+        "POST / HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        "User-Agent: xmlrpc_redes/1.0\r\n"
+        "Content-Type: text/xml\r\n"
+        f"Content-Length: {len(data_bytes)}\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode() + data_bytes
+
+    # Mandamos por socket crudo
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect(("150.150.0.2", 8000))
+        s.sendall(request)
+        response = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+
+    # Mostramos la respuesta del servidor
+    print(response.decode(errors="ignore"))
+    print("✅ Devuelve un <fault> con faultCode=1 (Error parseo de XML).")
+
+
+def test_invalid_http_get():
+    print("\n--- Prueba de HTTP Inválido ---")
+
+    # Request armado con GET en lugar de POST
+    bad_http = (
+        "GET / HTTP/1.1\r\n"
+        "Host: 150.150.0.2:8000\r\n"
+        "User-Agent: xmlrpc_redes/1.0\r\n"
+        "Content-Type: text/xml\r\n"
+        "Content-Length: 0\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode()
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect(("150.150.0.2", 8000))
+        s.sendall(bad_http)
+        response = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+
+    print(response.decode(errors="ignore"))
+    print("✅ El servidor debería devolver un <fault> con faultCode=5 (Solicitud HTTP inválida o método no permitido).")
+
+
+def test_invalid_http_bad_headers():
+    print("\n--- Prueba de HTTP Inválido ---")
+
+    valid_xml = """<?xml version="1.0"?>
+        <methodCall>
+        <methodName>suma</methodName>
+        <params>
+            <param><value><int>5</int></value></param>
+            <param><value><int>7</int></value></param> 
+        </params>
+        </methodCall>
+        """
+    data_bytes = valid_xml.encode()
+
+    # Request armado con POST pero un encabezado mal y otro faltante
+    # XML valido
+    bad_http = (
+        "POST / HTTP/1.1\r\n"
+        "Host: 150.150.0.2:8000\r\n"
+        "User-Agent: xmlrpc_redes/1.0\r\n"
+        "Content-HOLA: text/xml\r\n"
+        "Connection: close\r\n\r\n"
+    ).encode() + data_bytes
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.connect(("150.150.0.2", 8000))
+        s.sendall(bad_http)
+        response = b""
+        while True:
+            chunk = s.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+
+    print(response.decode(errors="ignore"))
+    print("✅ El servidor debería devolver un <fault> con faultCode=5 (Solicitud HTTP inválida o método no permitido).")
+
+
+
+
+
+
 def main():
     conn_a = connect("150.150.0.2", 8000)
     conn_b = connect("100.100.0.2", 8000)  
     
+
     # Pruebas básicas
     test_basic_calls(conn_a)
     
@@ -180,8 +295,25 @@ def main():
 
     # prueba de concurrencia con operaciones mixtas y errores, se hacen en el server 1
     test_concurrency_mixed_operations()
+
+    #prueba para error de parseo xml
+    test_invalid_xml()
+
+    #prueba 1 para error de HTTP (se manda con GET)
+    test_invalid_http_get()
+
+    #prueba 2 para error de HTTP (head corrupto)
+    test_invalid_http_bad_headers()
     
     print("\n✅ ¡Todas las pruebas completadas exitosamente!")
+
+    print("\n--- CLIENTE EN ESPERA (Presiona Ctrl+C para salir) ---")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\n👋 Cliente cerrado por el usuario.")
+
 
 if __name__ == "__main__":
     main()
