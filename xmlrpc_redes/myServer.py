@@ -57,5 +57,5 @@ if __name__ == "__main__":
     server.add_method(divide)
 
     print("Servidor A escuchando en 150.150.0.2:8000")
-    print("Métodos disponibles: suma, resta, concat, get_current_year, repeat_string, echo_large_text, slow_method, divide")
+    print("Métodos disponibles: suma \n resta \n divide \n concat \n get_current_year \n repeat_string \n echo_large_text \n slow_method")
     server.serve()

@@ -8,7 +8,7 @@ import socket
 
 
 def test_basic_calls(conn):
-    print("\n--- Llamadas Válidas Básicas ---")
+    print("\n---  Llamadas Válidas Básicas ---")
     print("A.suma(7,5)    =>", conn.suma(7, 5))
     print("A.resta(7,5)   =>", conn.resta(7, 5))
     print("A.concat('hi','!') =>", conn.concat("hi", "!"))
@@ -19,13 +19,13 @@ def test_new_methods(conn):
     print("A.repeat_string(3, 'OK') =>", conn.repeat_string(3, "OK"))
     
     # Generar texto grande (~20.000 palabras)
-    print("Generando texto grande (~20.000 palabras)...")
+    print(" Generando texto grande (~20.000 palabras)...")
     large_text = lorem.words(20000)  # Genera 20.000 palabras
     print(f"Texto generado: {len(large_text)} caracteres")
     echoed = conn.echo_large_text(large_text)
     print(f"Echo recibido: {len(echoed)} caracteres (OK si coincide)")
     
-    print("A.slow_method(12) => Iniciando (esperar ~12s)...")
+    print("⏳ A.slow_method(12) => Iniciando (esperar ~12s)... ⏳")
     result = conn.slow_method(12)
     print("Resultado:", result)
     
@@ -33,7 +33,7 @@ def test_new_methods(conn):
     try:
         print("A.divide(10, 0) =>", conn.divide(10, 0))
     except Exception as e:
-        print("✅ Error esperado (división por cero):", e)
+        print("🎯 Error esperado (división por cero):", e)
 
 #pruebas de errores 
 
@@ -42,29 +42,29 @@ def test_error_cases(conn):
     try:
         print("A.noexiste(1,2) =>", conn.noexiste(1,2))
     except Exception as e:
-        print("✅ Error esperado (método no existe):", e)
+        print("🎯 Error esperado (método no existe):", e)
 
     try:
         print("A.suma() =>", conn.suma())  # Menos parámetros
     except Exception as e:
-        print("✅ Error esperado (faltan parámetros):", e)
+        print("🎯 Error esperado (faltan parámetros):", e)
 
     try:
         print("A.suma(1,2,3) =>", conn.suma(1,2,3))  # Más parámetros
     except Exception as e:
-        print("✅ Error esperado (demasiados parámetros):", e)
+        print("🎯 Error esperado (demasiados parámetros):", e)
 
     try:
         print("A.suma('a', 'b') =>", conn.suma('a', 'b'))  # Parámetros inválidos
     except Exception as e:
-        print("✅ Error esperado (parámetros inválidos):", e)
+        print("🎯 Error esperado (parámetros inválidos):", e)
 
 def test_concurrency():
-    print("\n--- Prueba de Concurrencia (5 clientes simultáneos) ---")
+    print("\n--- 🧵 Prueba de Concurrencia (5 clientes simultáneos) 🧵 ---")
     def client_thread(id):
         try:
             conn = connect("150.150.0.2", 8000)
-            print(f"[Cliente {id}] Llamando a slow_method...")
+            print(f"[Cliente {id}] Llamando a slow_method... ⏳")
             result = conn.slow_method(5)  # 5 segundos para no demorar demasiado
             print(f"[Cliente {id}] Resultado: {result}")
         except Exception as e:
@@ -90,7 +90,7 @@ def test_concurrency_mixed_operations():
     Prueba de concurrencia mejorada: 5 clientes simultáneos haciendo operaciones distintas.
     2 de ellos provocan errores intencionales (división por cero y parámetros inválidos).
     """
-    print("\n--- PRUEBA DE CONCURRENCIA MEJORADA (5 clientes, operaciones mixtas + errores) ---")
+    print("\n---🧵 PRUEBA DE CONCURRENCIA MEJORADA (5 clientes, operaciones mixtas + errores) 🧵---")
     
     def client_thread(id, operation, args):
         try:
@@ -100,7 +100,7 @@ def test_concurrency_mixed_operations():
             result = method(*args)
             print(f"[Cliente {id}] ✅ Resultado: {result}")
         except Exception as e:
-            print(f"[Cliente {id}] ❌ Error capturado: {e}")
+            print(f"[Cliente {id}] 🎯 Error capturado: {e}")
 
     # Definimos las operaciones para cada cliente
     test_cases = [
@@ -132,7 +132,7 @@ def test_concurrency_mixed_operations():
 
 def test_server2_methods(conn_b):
     """Pruebas específicas para server2 (100.100.0.2) - Simple y efectiva."""
-    print("\n--- PRUEBAS PARA SERVIDOR B (100.100.0.2) ---")
+    print("\n--- 🖥️ PRUEBAS PARA SERVIDOR B (100.100.0.2) 🖥️ ---")
 
     # 1. Llamadas Válidas
     print("\n1. Llamadas Válidas:")
@@ -145,25 +145,22 @@ def test_server2_methods(conn_b):
     try:
         print("  B.join_with('-', 'NO_es_lista') =>", conn_b.join_with("-", "NO_es_lista"))
     except Exception as e:
-        print("  ✅ Error esperado (join_with):", e)
+        print("  🎯 Error esperado (join_with):", e)
 
     try:
         print("  B.to_upper('hola', 'NO_es_int') =>", conn_b.to_upper("hola", "NO_es_int"))
     except Exception as e:
-        print("  ✅ Error esperado (to_upper):", e)
+        print("  🎯 Error esperado (to_upper):", e)
 
     try:
         print("  B.power('a', 'b') =>", conn_b.power('a', 'b'))
     except Exception as e:
-        print("  ✅ Error esperado (power):", e)
-
-
-
+        print("  🎯 Error esperado (power):", e)
 
 
 
 def test_invalid_xml():
-    print("\n--- Prueba de XML Inválido ---")
+    print("\n--- Prueba de XML Inválido 📝---")
 
     # XML intencionalmente mal formado 
     invalid_xml = """<?xml version="1.0"?>
@@ -205,7 +202,7 @@ def test_invalid_xml():
 
 
 def test_invalid_http_get():
-    print("\n--- Prueba de HTTP Inválido ---")
+    print("\n--- Prueba de HTTP Inválido , GET en lugar de POST 📝---")
 
     # Request armado con GET en lugar de POST
     bad_http = (
@@ -232,7 +229,7 @@ def test_invalid_http_get():
 
 
 def test_invalid_http_bad_headers():
-    print("\n--- Prueba de HTTP Inválido ---")
+    print("\n--- Prueba de HTTP Inválido, Headers incorrectos 📝---")
 
     valid_xml = """<?xml version="1.0"?>
         <methodCall>
@@ -249,9 +246,9 @@ def test_invalid_http_bad_headers():
     # XML valido
     bad_http = (
         "POST / HTTP/1.1\r\n"
-        "Host: 150.150.0.2:8000\r\n"
-        "User-Agent: xmlrpc_redes/1.0\r\n"
-        "Content-HOLA: text/xml\r\n"
+        "Mati Rugnon: 150.150.0.2:8000\r\n"
+        "Indio Solari: xmlrpc_redes/1.0\r\n"
+        "ACDC-lenght: text/xml\r\n"
         "Connection: close\r\n\r\n"
     ).encode() + data_bytes
 
